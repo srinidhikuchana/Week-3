@@ -3,34 +3,32 @@ import pandas as pd
 import re
 import zipfile
 import io
+import os
 
-# --- File Upload ---
-st.sidebar.header("📂 Upload Dataset ZIP File")
-uploaded_zip = st.sidebar.file_uploader("Upload Electric_Vehicle_Population_Data.zip", type=["zip"])
+# --- Load Dataset Automatically ---
+zip_path = "Electric_Vehicle_Population_Data.zip"
 
-if uploaded_zip is not None:
-    # Read ZIP file in memory
-    with zipfile.ZipFile(uploaded_zip, 'r') as zip_ref:
-        # Find CSV file inside ZIP
+if os.path.exists(zip_path):
+    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
         csv_files = [f for f in zip_ref.namelist() if f.endswith('.csv')]
         if not csv_files:
-            st.error("❌ No CSV file found inside the uploaded ZIP.")
+            st.error("❌ No CSV file found inside the ZIP.")
             st.stop()
 
-        # Load first CSV file
         with zip_ref.open(csv_files[0]) as file:
             df = pd.read_csv(file)
 
-    # --- Preprocess ---
     df['Make'] = df['Make'].astype(str).str.lower().str.strip()
     df['Model'] = df['Model'].astype(str).str.lower().str.strip()
     df['Electric Vehicle Type'] = df['Electric Vehicle Type'].astype(str).str.strip()
     df['Electric Range'] = pd.to_numeric(df['Electric Range'], errors='coerce').fillna(0)
 
     st.success(f"✅ Dataset loaded successfully! File: `{csv_files[0]}` | Shape: {df.shape}")
+
 else:
-    st.warning("⚠️ Please upload the **Electric_Vehicle_Population_Data.zip** file to continue.")
+    st.error("❌ ZIP file not found. Please ensure 'Electric_Vehicle_Population_Data.zip' is in the same directory as this script.")
     st.stop()
+
 
 # --- Utility Functions ---
 def normalize_text(text):
@@ -66,7 +64,6 @@ def predict_vehicle_type(make_model, user_range=None):
 st.title("⚡ Electric Vehicle Type Predictor Chatbot")
 st.markdown("Chat with me to find out whether an electric vehicle is a **BEV** or **PHEV**, based on real dataset records.")
 
-# Session state for conversation
 if "step" not in st.session_state:
     st.session_state.step = "greet"
 if "make_model" not in st.session_state:
@@ -76,7 +73,6 @@ if "history" not in st.session_state:
         {"user": None, "bot": "Hi there! ⚡ I'm your EV Type Assistant. I can help you determine whether an electric vehicle is a BEV or PHEV."}
     ]
 
-# Chatbot logic
 def chatbot_response(message):
     step = st.session_state.step
 
@@ -110,13 +106,12 @@ def chatbot_response(message):
             st.session_state.make_model = None
             return "Alright! What is the make and model of the next vehicle?"
 
-# --- Display Chat History ---
+
 for chat in st.session_state.history:
     if chat["user"]:
         st.chat_message("user").write(chat["user"])
     st.chat_message("assistant").write(chat["bot"])
 
-# --- User Input ---
 user_message = st.chat_input("Type your message...")
 
 if user_message:
