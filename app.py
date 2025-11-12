@@ -1,12 +1,8 @@
-# =====================================================
-# ⚡ Electric Vehicle Type Predictor Chatbot (Streamlit)
-# =====================================================
-
+import streamlit as st
 import pandas as pd
 import re
-import streamlit as st
 
-# --- Load dataset ---
+# --- Load Dataset ---
 @st.cache_data
 def load_data():
     df = pd.read_csv("Electric_Vehicle_Population_Data.csv")
@@ -17,6 +13,7 @@ def load_data():
     return df
 
 df = load_data()
+st.success(f"✅ Dataset loaded successfully! Shape: {df.shape}")
 
 # --- Utility Functions ---
 def normalize_text(text):
@@ -29,7 +26,6 @@ def find_vehicle(make_model):
 
 def predict_vehicle_type(make_model, user_range=None):
     vehicle_data = find_vehicle(make_model)
-
     if vehicle_data is None:
         return f"❌ Sorry, I couldn’t find '{make_model}' in the dataset. Please try another make and model."
 
@@ -38,92 +34,76 @@ def predict_vehicle_type(make_model, user_range=None):
 
     if user_range:
         if abs(user_range - avg_range) > 50:
-            return (f"The range you mentioned (**{user_range} miles**) differs from the dataset's average (**{avg_range:.0f} miles**). "
-                    f"However, according to records, the **{make_model}** is a **{ev_type}**.")
+            return (f"⚠️ The range you mentioned ({user_range} miles) differs from the dataset's average ({avg_range:.0f} miles). "
+                    f"However, according to records, the {make_model} is a **{ev_type}**.")
         else:
-            description = (
-                "Battery Electric Vehicle (BEV), running solely on electricity."
-                if "BEV" in ev_type
-                else "Plug-in Hybrid Electric Vehicle (PHEV), combining electric and gasoline power."
-            )
-            return (f"Based on your provided range (**{user_range} miles**) and the dataset, "
-                    f"the **{make_model}** is a **{ev_type}** — {description}")
+            description = "Battery Electric Vehicle (BEV) — runs solely on electricity." if "BEV" in ev_type else \
+                          "Plug-in Hybrid Electric Vehicle (PHEV) — combines electric and gasoline power."
+            return (f"🔋 Based on your provided range ({user_range} miles) and dataset info, "
+                    f"the {make_model} is a **{ev_type}** — {description}")
     else:
-        return f"According to the dataset, the **{make_model}** is classified as a **{ev_type}**."
+        return f"According to the dataset, the {make_model} is classified as a **{ev_type}**."
 
 
-# --- Streamlit Chatbot ---
-st.set_page_config(page_title="Electric Vehicle Type Predictor", page_icon="⚡", layout="centered")
-
+# --- Streamlit Chat UI ---
 st.title("⚡ Electric Vehicle Type Predictor Chatbot")
-st.write("Chat with me to find out whether an electric vehicle is a **BEV** or **PHEV**, based on real dataset records.")
+st.markdown("Chat with me to find out whether an electric vehicle is a **BEV** or **PHEV**, based on real dataset records.")
 
-# --- Initialize session state ---
-if "history" not in st.session_state:
-    st.session_state.history = []
+# Session state to maintain conversation
 if "step" not in st.session_state:
     st.session_state.step = "greet"
 if "make_model" not in st.session_state:
     st.session_state.make_model = None
+if "history" not in st.session_state:
+    st.session_state.history = [
+        {"user": None, "bot": "Hi there! ⚡ I'm your EV Type Assistant. I can help you determine whether an electric vehicle is a BEV or PHEV."}
+    ]
 
-# --- Chat Interface ---
-user_input = st.chat_input("Type your message here...")
+# Function to handle chatbot logic
+def chatbot_response(message):
+    step = st.session_state.step
 
-if user_input:
-    user_message = user_input.strip()
-    bot_response = ""
-
-    # Step 1: Greeting
-    if st.session_state.step == "greet":
-        bot_response = "What’s the make and model of the electric vehicle you want me to look up?"
+    if step == "greet":
         st.session_state.step = "make_model"
+        return "What’s the make and model of the electric vehicle you want me to look up?"
 
-    # Step 2: Make & Model
-    elif st.session_state.step == "make_model":
-        st.session_state.make_model = user_message
-        vehicle_data = find_vehicle(user_message)
+    elif step == "make_model":
+        st.session_state.make_model = message
+        vehicle_data = find_vehicle(message)
         if vehicle_data is None:
-            bot_response = "❌ Sorry, I couldn’t find that make and model. Please try another."
-        else:
-            bot_response = f"✅ Great! Can you tell me the approximate electric range (in miles) for the {user_message}?"
-            st.session_state.step = "range"
+            return "Sorry, I couldn’t find that make and model in the dataset. Please try another."
+        st.session_state.step = "range"
+        return f"Great! Can you tell me the approximate electric range (in miles) for the {message}?"
 
-    # Step 3: Range
-    elif st.session_state.step == "range":
-        match = re.search(r'\d+', user_message)
+    elif step == "range":
+        match = re.search(r'\d+', message)
         if not match:
-            bot_response = "⚠️ Please provide a valid numeric range, like '333 miles'."
-        else:
-            user_range = int(match.group())
-            bot_response = predict_vehicle_type(st.session_state.make_model, user_range)
-            bot_response += " Would you like to check another vehicle?"
-            st.session_state.step = "followup"
+            return "Please provide a valid numeric range, like '333 miles'."
+        user_range = int(match.group())
+        response = predict_vehicle_type(st.session_state.make_model, user_range)
+        st.session_state.step = "followup"
+        return response + " Would you like to check another vehicle?"
 
-    # Step 4: Follow-up
-    elif st.session_state.step == "followup":
-        if user_message.lower() in ["no", "n", "exit", "quit"]:
-            bot_response = "👋 Goodbye! Have a great day!"
+    elif step == "followup":
+        if message.lower() in ["no", "n", "exit", "quit"]:
             st.session_state.step = "greet"
+            return "Goodbye! 👋"
         else:
-            bot_response = "Alright! 🚘 What’s the make and model of the next vehicle?"
             st.session_state.step = "make_model"
+            st.session_state.make_model = None
+            return "Alright! What is the make and model of the next vehicle?"
 
-    # Save conversation
-    st.session_state.history.append(("You", user_message))
-    st.session_state.history.append(("Bot", bot_response))
 
-# --- Display Chat History ---
-for sender, msg in st.session_state.history:
-    if sender == "You":
-        with st.chat_message("user"):
-            st.markdown(msg)
-    else:
-        with st.chat_message("assistant"):
-            st.markdown(msg)
+# Display chat history
+for chat in st.session_state.history:
+    if chat["user"]:
+        st.chat_message("user").write(chat["user"])
+    st.chat_message("assistant").write(chat["bot"])
 
-# --- Clear Chat Button ---
-if st.button("🧹 Clear Chat"):
-    st.session_state.history = []
-    st.session_state.step = "greet"
-    st.session_state.make_model = None
+# User input
+user_message = st.chat_input("Type your message...")
+
+if user_message:
+    response = chatbot_response(user_message)
+    st.session_state.history.append({"user": user_message, "bot": response})
     st.rerun()
